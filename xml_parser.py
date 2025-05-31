@@ -20,16 +20,13 @@ BASE_DB_URL = 'sqlite:///education.db'
 
 Base = declarative_base()
 
-
 class OrganizationProgramAssociation(Base):
     __tablename__ = 'organization_program_association'
     organization_external_id = Column(String, ForeignKey('educational_organizations.Id'), primary_key=True)
     program_external_id = Column(String, ForeignKey('educational_programs.Id'), primary_key=True)
 
-
 class EducationalOrganization(Base):
     __tablename__ = 'educational_organizations'
-
     Id = Column(String, primary_key=True)
     HeadEduOrgId = Column(String)
     FullName = Column(Text)
@@ -58,10 +55,8 @@ class EducationalOrganization(Base):
         back_populates="organizations"
     )
 
-
 class EducationalProgram(Base):
     __tablename__ = 'educational_programs'
-
     Id = Column(String, primary_key=True)
     TypeName = Column(String)
     EduLevelName = Column(String)
@@ -71,9 +66,9 @@ class EducationalProgram(Base):
     UGSName = Column(String)
     EduNormativePeriod = Column(String)
     Qualification = Column(String)
-    IsAccredited = Column(Boolean)
-    IsCanceled = Column(Boolean)
-    IsSuspended = Column(Boolean)
+    IsAccredited = Column(String)
+    IsCanceled = Column(String)
+    IsSuspended = Column(String)
 
     organizations = relationship(
         "EducationalOrganization",
@@ -81,11 +76,8 @@ class EducationalProgram(Base):
         back_populates="programs"
     )
 
-
-
 def file_hash(content):
     return hashlib.sha256(content).hexdigest()
-
 
 def save_to_cache(url, content):
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -94,7 +86,6 @@ def save_to_cache(url, content):
     with open(path, "wb") as f:
         f.write(content)
     return path
-
 
 def has_file_changed(url, content):
     hash_path = os.path.join(CACHE_DIR, "hashes.txt")
@@ -106,7 +97,6 @@ def has_file_changed(url, content):
             if line.startswith(url.split("/")[-1] + ":"):
                 return line.strip().split(":")[1] != file_hash(content)
     return True
-
 
 def update_hash(url, content):
     file_name = url.split("/")[-1]
@@ -126,19 +116,16 @@ def update_hash(url, content):
         for name, h in hashes.items():
             f.write(f"{name}:{h}\n")
 
-
 def extract_archive(zip_path, extract_to):
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(extract_to)
     print(f"Архив распакован в: {extract_to}")
-
 
 def clean_directory(directory, keep_files):
     for item in os.listdir(directory):
         item_path = os.path.join(directory, item)
         if os.path.isfile(item_path) and item not in keep_files:
             os.remove(item_path)
-
 
 def download_if_updated(zip_url):
     try:
@@ -154,16 +141,19 @@ def download_if_updated(zip_url):
         print(f"Ошибка загрузки: {e}")
         raise
 
-
 def get_text(element, tag):
     elem = element.find(tag)
     return elem.text.strip() if (elem is not None and elem.text is not None) else ""
 
-
 def get_bool(element, tag):
     elem = element.find(tag)
-    return elem.text == "1" if elem is not None else False
-
+    if elem is None or elem.text is None:
+        return "1" if tag == "IsAccredited" else "0"  # Инвертируем для IsAccredited
+    text = elem.text.strip().lower()
+    if tag == "IsAccredited":
+        return "0" if text in ('1', 'true', 't', 'yes', 'y', 'да') else "1"
+    else:
+        return "1" if text in ('1', 'true', 't', 'yes', 'y', 'да') else "0"
 
 def parse_xml(xml_file):
     organizations = {}
@@ -183,7 +173,7 @@ def parse_xml(xml_file):
                     HeadEduOrgId=get_text(org_elem, "HeadEduOrgId"),
                     FullName=get_text(org_elem, "FullName"),
                     ShortName=get_text(org_elem, "ShortName"),
-                    IsBranch=get_bool(org_elem, "IsBranch"),
+                    IsBranch=get_bool(org_elem, "IsBranch") == "1",
                     PostAddress=get_text(org_elem, "PostAddress"),
                     Phone=get_text(org_elem, "Phone"),
                     Fax=get_text(org_elem, "Fax"),
@@ -236,7 +226,6 @@ def parse_xml(xml_file):
         print(f"Ошибка парсинга XML: {e}")
         raise
 
-
 def main():
     try:
         # Поиск актуального архива
@@ -287,7 +276,6 @@ def main():
     except Exception as e:
         print(f"\nКритическая ошибка: {e}")
         raise
-
 
 if __name__ == "__main__":
     main()
